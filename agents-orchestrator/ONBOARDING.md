@@ -1,90 +1,92 @@
-# Onboarding: `agents-orchestrator`
+# Onboarding: `agents-orchestrator` (BARCAN-TAG OS)
 
-Welcome to the **Agents Orchestrator**! This service is the "brain" that manages your AI workforce (Jules agents) by coordinating their activities between **Linear** (tasks) and **GitHub** (code).
+Welcome to the **BARCAN-TAG Orchestration System**! This service manages an autonomous AI engineering organization based on philosophical and operational rigor.
 
-## 1. How It Works (The Pull System)
+## 1. Full Agent List
 
-Instead of pushing tasks to agents, this service implements a **Pull System**:
-1. **WIP Check**: The orchestrator checks if an agent is already working on something in Linear.
-2. **Pull**: If free, it looks for a task in Linear that matches the agent's allowed roles.
-3. **Lock**: It atomically assigns the task to the agent to prevent others from taking it.
-4. **Execute**: It clones the code into a private workspace, injects the role prompt, and calls Jules.
-5. **Finish**: It reports back to Linear, updates the status, and wipes the workspace.
-
----
-
-## 2. Prerequisites
-
-- **Node.js**: v18+
-- **Linear API Key**: With write access to your team.
-- **Jules API Key**: For each agent (provided via environment variables).
-- **Environment Variables**:
-  - `LINEAR_API_KEY`: Your master key for Linear management.
-  - `JULES_API_URL`: The endpoint for the Jules execution service.
-  - `JULES_TOKEN_1`, `JULES_TOKEN_2`, etc.: Individual tokens for your agents.
+| ID | Agent Name | Role |
+|----|-----------|------|
+| `BARCAN-TAG-01` | ACTUALIST-OBJECT | Solution Architect |
+| `BARCAN-TAG-02` | RIGID-DESIGNATOR | Backend / Integration Engineer |
+| `BARCAN-TAG-03` | BELIEF-INTENSION | UI/UX Designer |
+| `BARCAN-TAG-04` | MODAL-QUANTIFIER | Data Scientist / ML Engineer |
+| `BARCAN-TAG-05` | NECESSARY-IDENTITY | SRE / DevOps |
+| `BARCAN-TAG-06` | DEONTIC-CONSISTENCY | QA Automation |
+| `BARCAN-TAG-07` | SECOND-ORDER-KNOWLEDGE | AppSec / DevSecOps |
+| `BARCAN-TAG-08` | SUBSTITUTIVITY-SALVA-VERITATE | Data Engineer / DBA |
+| `BARCAN-TAG-09` | MORAL-DILEMMA | Technical Product Manager |
+| `BARCAN-TAG-10` | DEONTIC-PROHIBITION | Data Governance / Compliance |
+| `BARCAN-TAG-11` | CLIENT-PERCEPTION | Frontend Engineer |
+| `BARCAN-TAG-12` | TECH-LEAD | Tech-Lead / Code Reviewer |
 
 ---
 
-## 3. Configuration (`config/agents-matrix.json`)
+## 2. System Architecture
 
-This file binds physical Google accounts to their operational capabilities.
+The system operates on a **Stateless Pull Model** using Linear as the source of truth.
 
-```json
-{
-  "agents": [
-    {
-      "id": "worker-01",
-      "google_account_email": "jules-techlead@gmail.com",
-      "linear_user_id": "linear_user_uuid_here",
-      "jules_api_token": "env:JULES_TOKEN_1",
-      "allowed_roles": ["role-techlead"]
-    }
-  ]
-}
+### Workflow:
+1. **Inbox**: New tasks land here.
+2. **Triage**: `BARCAN-TAG-12` (Tech-Lead) pulls from Inbox, analyzes, adds a role tag (e.g., `BARCAN-TAG-02`), and moves to `Todo`.
+3. **Operational Pull**: The agent with the matching tag pulls the task into `In Progress`.
+4. **Execution**: Jules executes the task in an isolated workspace.
+5. **Closure**: Code is pushed, PR created, and Linear task is updated to `Done` or `Ready for Audit`.
+
+---
+
+## 3. Interaction Map
+
+```
+                        ┌─────────────┐
+                        │  TAG-09     │
+                        │  Медиатор   │◄── Арбитр конфликтов
+                        └──────┬──────┘
+                               │ декомпозиция
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+        ┌──────────┐    ┌──────────┐    ┌──────────┐
+        │  TAG-01  │    │  TAG-02  │    │  TAG-06  │
+        │ Architect│───►│ Backend  │    │   QA     │
+        └──────────┘    └──────────┘    └──────────┘
+              │                │
+              ▼                ▼
+        ┌──────────┐    ┌──────────┐
+        │  TAG-08  │    │  TAG-04  │
+        │Data Eng. │───►│ ML Eng.  │
+        └──────────┘    └──────────┘
+              │
+              ▼
+        ┌──────────┐    ┌──────────┐
+        │  TAG-03  │    │  TAG-05  │
+        │  UX/UI   │───►│  DevOps  │
+        └──────────┘    └──────────┘
+              │
+              ▼
+        ┌──────────┐    ┌──────────┐    ┌──────────┐
+        │  TAG-11  │    │  TAG-07  │    │  TAG-10  │
+        │ Frontend │◄──►│  AppSec  │◄──►│Compliance│
+        └──────────┘    └──────────┘    └──────────┘
 ```
 
 ---
 
-## 4. Integration into your Metaproject
+## 4. Configuration and Setup
 
-To integrate this orchestrator into your existing workflow:
+### A. Linear Labels
+Ensure you have labels created in Linear exactly matching the IDs: `BARCAN-TAG-01` through `BARCAN-TAG-12`.
 
-### A. Linear Setup
-1. **Labels**: Create labels in Linear matching your role names (e.g., `role-architect`, `role-developer`).
-2. **Workflow States**: Ensure you have `Inbox`, `Todo`, `In Progress`, `Ready for Audit`, and `Done` states.
-3. **Task Formatting**: Ensure task descriptions contain the GitHub repository URL. The orchestrator uses this to know where to clone the code.
+### B. Environment Variables
+- `LINEAR_API_KEY`: Master management key.
+- `JULES_TOKEN_01` to `JULES_TOKEN_12`: Tokens for each agent account.
 
-### B. Role Prompts
-Edit files in `roles/role-*.md` to define the "personality" and rules for each agent. The orchestrator automatically injects the safety protocol and agent email.
-
-### C. Deployment
-Run the service as a background process (e.g., using `pm2` or as a Docker container).
-
+### C. Execution
 ```bash
 cd agents-orchestrator
 npm install
-LINEAR_API_KEY=xxx node pull-engine.js
+node pull-engine.js
 ```
 
 ---
 
-## 5. The Techlead Workflow (The Gatekeeper)
-
-The **Techlead** is special. He doesn't write code.
-- He pulls tasks from the **Inbox** (tasks with no assignee and no labels).
-- He analyzes the requirements.
-- He must output a report containing the string `role-xxx` (e.g., `role-architect`).
-- The orchestrator will then:
-  1. Add the `role-architect` label to the task.
-  2. Move it to `Todo`.
-  3. Unassign the Techlead.
-- This makes the task visible to the Architect agents!
-
----
-
-## 6. Critical Advice for Production
-
-1. **Structured Logging**: Switch to `pino` for better observability.
-2. **Disk Space**: Regularly monitor the `workspace/` folder. While the orchestrator cleans up, a crash might leave "orphaned" folders.
-3. **Rate Limits**: If running >10 agents, increase the `POLL_INTERVAL` to avoid Linear API rate limits.
-4. **Git Security**: The orchestrator sanitizes URLs, but ensure the server running the orchestrator has restricted SSH keys.
+## 5. Global Rules
+Refer to `BRAND-OS_GLOBAL_RULES.md` for governing principles and `AGENT_TEMPLATE.md` for adding new agents.

@@ -1,18 +1,100 @@
 {
   "agents": [
     {
-      "id": "worker-01",
-      "google_account_email": "jules-account-1@gmail.com",
-      "linear_user_id": "usr_TL123",
-      "jules_api_token": "env:JULES_TOKEN_1",
-      "allowed_roles": ["role-techlead"]
+      "id": "BARCAN-TAG-01",
+      "name": "ACTUALIST-OBJECT",
+      "google_account_email": "jules-01@gmail.com",
+      "linear_user_id": "usr_TAG01",
+      "jules_api_token": "env:JULES_TOKEN_01",
+      "allowed_roles": ["BARCAN-TAG-01"]
     },
     {
-      "id": "worker-02",
-      "google_account_email": "jules-account-2@gmail.com",
-      "linear_user_id": "usr_ARCH456",
-      "jules_api_token": "env:JULES_TOKEN_2",
-      "allowed_roles": ["role-architect", "role-auditor"]
+      "id": "BARCAN-TAG-02",
+      "name": "RIGID-DESIGNATOR",
+      "google_account_email": "jules-02@gmail.com",
+      "linear_user_id": "usr_TAG02",
+      "jules_api_token": "env:JULES_TOKEN_02",
+      "allowed_roles": ["BARCAN-TAG-02"]
+    },
+    {
+      "id": "BARCAN-TAG-03",
+      "name": "BELIEF-INTENSION",
+      "google_account_email": "jules-03@gmail.com",
+      "linear_user_id": "usr_TAG03",
+      "jules_api_token": "env:JULES_TOKEN_03",
+      "allowed_roles": ["BARCAN-TAG-03"]
+    },
+    {
+      "id": "BARCAN-TAG-04",
+      "name": "MODAL-QUANTIFIER",
+      "google_account_email": "jules-04@gmail.com",
+      "linear_user_id": "usr_TAG04",
+      "jules_api_token": "env:JULES_TOKEN_04",
+      "allowed_roles": ["BARCAN-TAG-04"]
+    },
+    {
+      "id": "BARCAN-TAG-05",
+      "name": "NECESSARY-IDENTITY",
+      "google_account_email": "jules-05@gmail.com",
+      "linear_user_id": "usr_TAG05",
+      "jules_api_token": "env:JULES_TOKEN_05",
+      "allowed_roles": ["BARCAN-TAG-05"]
+    },
+    {
+      "id": "BARCAN-TAG-06",
+      "name": "DEONTIC-CONSISTENCY",
+      "google_account_email": "jules-06@gmail.com",
+      "linear_user_id": "usr_TAG06",
+      "jules_api_token": "env:JULES_TOKEN_06",
+      "allowed_roles": ["BARCAN-TAG-06"]
+    },
+    {
+      "id": "BARCAN-TAG-07",
+      "name": "SECOND-ORDER-KNOWLEDGE",
+      "google_account_email": "jules-07@gmail.com",
+      "linear_user_id": "usr_TAG07",
+      "jules_api_token": "env:JULES_TOKEN_07",
+      "allowed_roles": ["BARCAN-TAG-07"]
+    },
+    {
+      "id": "BARCAN-TAG-08",
+      "name": "SUBSTITUTIVITY-SALVA-VERITATE",
+      "google_account_email": "jules-08@gmail.com",
+      "linear_user_id": "usr_TAG08",
+      "jules_api_token": "env:JULES_TOKEN_08",
+      "allowed_roles": ["BARCAN-TAG-08"]
+    },
+    {
+      "id": "BARCAN-TAG-09",
+      "name": "MORAL-DILEMMA",
+      "google_account_email": "jules-09@gmail.com",
+      "linear_user_id": "usr_TAG09",
+      "jules_api_token": "env:JULES_TOKEN_09",
+      "allowed_roles": ["BARCAN-TAG-09"]
+    },
+    {
+      "id": "BARCAN-TAG-10",
+      "name": "DEONTIC-PROHIBITION",
+      "google_account_email": "jules-10@gmail.com",
+      "linear_user_id": "usr_TAG10",
+      "jules_api_token": "env:JULES_TOKEN_10",
+      "allowed_roles": ["BARCAN-TAG-10"]
+    },
+    {
+      "id": "BARCAN-TAG-11",
+      "name": "CLIENT-PERCEPTION",
+      "google_account_email": "jules-11@gmail.com",
+      "linear_user_id": "usr_TAG11",
+      "jules_api_token": "env:JULES_TOKEN_11",
+      "allowed_roles": ["BARCAN-TAG-11"]
+    },
+    {
+      "id": "BARCAN-TAG-12",
+      "name": "TECH-LEAD",
+      "google_account_email": "jules-12@gmail.com",
+      "linear_user_id": "usr_TAG12",
+      "jules_api_token": "env:JULES_TOKEN_12",
+      "allowed_roles": ["BARCAN-TAG-12"]
     }
   ]
 }

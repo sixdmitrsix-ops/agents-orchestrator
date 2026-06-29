@@ -98,10 +98,10 @@ async function checkWIP(userId) {
 }
 
 async function pullTask(agent) {
-  const isTechlead = agent.allowed_roles.includes("role-techlead");
+  const isTechlead = agent.allowed_roles.includes("BARCAN-TAG-12");
 
   if (isTechlead) {
-    // Techlead pulls from Inbox, no assignee, and specifically NO labels (supermarket replenishment)
+    // Techlead pulls from Inbox, no assignee, and specifically NO BARCAN labels
     const inboxIssues = await linearClient.issues({
       filter: {
         state: { name: { eq: "Inbox" } },
@@ -114,7 +114,7 @@ async function pullTask(agent) {
     if (inboxIssues.nodes.length > 0) return inboxIssues.nodes[0];
   }
 
-  const operationalRoles = agent.allowed_roles.filter(r => r !== "role-techlead");
+  const operationalRoles = agent.allowed_roles.filter(r => r !== "BARCAN-TAG-12");
   if (operationalRoles.length > 0) {
     const todoIssues = await linearClient.issues({
       filter: {
@@ -235,18 +235,19 @@ async function finishTask(agent, task, julesResponse, role) {
   let assigneeId = agent.linear_user_id;
   let labelIdsToAdd = [];
 
-  if (role === "role-techlead") {
+  if (role === "BARCAN-TAG-12") {
     newStateName = "Todo";
     assigneeId = null; // Techlead requirement
 
-    const roleTagMatch = (julesResponse.report || "").match(/role-[a-z-]+/);
+    // Parse role tags from julesResponse.report (e.g., "BARCAN-TAG-01")
+    const roleTagMatch = (julesResponse.report || "").match(/BARCAN-TAG-\d+/);
     if (roleTagMatch) {
       const tagToApply = roleTagMatch[0];
       const teamLabels = await team.labels();
       const label = teamLabels.nodes.find(l => l.name === tagToApply);
       if (label) labelIdsToAdd.push(label.id);
     }
-  } else if (role === "role-architect") {
+  } else if (role === "BARCAN-TAG-01") {
     newStateName = "Ready for Audit";
   }
 
@@ -283,8 +284,8 @@ async function handleTaskFailure(task, agent, error) {
 
 async function determineRole(agent, task) {
   const state = await task.state;
-  if (agent.allowed_roles.includes("role-techlead") && state.name === "Inbox") {
-    return "role-techlead";
+  if (agent.allowed_roles.includes("BARCAN-TAG-12") && state.name === "Inbox") {
+    return "BARCAN-TAG-12";
   }
   const labels = await task.labels();
   const roleLabel = labels.nodes.find(l => agent.allowed_roles.includes(l.name));
@@ -292,7 +293,14 @@ async function determineRole(agent, task) {
 }
 
 async function prepareContext(role, task, agent) {
-  const rolePromptPath = path.join(__dirname, "roles", `${role}.md`);
+  // Find the file that starts with the role ID
+  const rolesDir = path.join(__dirname, "roles");
+  const files = await fs.readdir(rolesDir);
+  const roleFile = files.find(f => f.startsWith(role));
+
+  if (!roleFile) throw new Error(`Role file for ${role} not found`);
+
+  const rolePromptPath = path.join(rolesDir, roleFile);
   let systemPrompt = await fs.readFile(rolePromptPath, "utf8");
 
   systemPrompt = systemPrompt.replace(/\[EMAIL_АГЕНТА\]/g, agent.google_account_email);
