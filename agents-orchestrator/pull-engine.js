@@ -23,16 +23,35 @@ function getToken(tokenStr) {
   return tokenStr;
 }
 
-const POLL_INTERVAL = 60000; // 60 seconds
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL) || 60000;
+
+let isRunning = true;
 
 async function runEngine() {
-  console.log("Starting Pull Engine...");
-  while (true) {
+  console.log(`[SYSTEM] Starting Pull Engine with ${matrix.agents.length} agents...`);
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    console.log("\n[SYSTEM] Shutdown signal received. Finishing active tasks...");
+    isRunning = false;
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  while (isRunning) {
+    const startTime = Date.now();
     const agentPromises = matrix.agents.map(agent => processAgent(agent));
     await Promise.allSettled(agentPromises);
-    console.log(`Waiting ${POLL_INTERVAL / 1000} seconds for next cycle...`);
-    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+
+    const duration = Date.now() - startTime;
+    const waitTime = Math.max(0, POLL_INTERVAL - duration);
+
+    if (isRunning) {
+      console.log(`[CYCLE] Finished in ${duration}ms. Waiting ${waitTime / 1000}s...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
   }
+  console.log("[SYSTEM] Engine stopped.");
 }
 
 async function processAgent(agent) {
