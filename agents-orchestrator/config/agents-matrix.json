@@ -1,0 +1,18 @@
+{
+  "agents": [
+    {
+      "id": "worker-01",
+      "google_account_email": "jules-account-1@gmail.com",
+      "linear_user_id": "usr_TL123",
+      "jules_api_token": "env:JULES_TOKEN_1",
+      "allowed_roles": ["role-techlead"]
+    },
+    {
+      "id": "worker-02",
+      "google_account_email": "jules-account-2@gmail.com",
+      "linear_user_id": "usr_ARCH456",
+      "jules_api_token": "env:JULES_TOKEN_2",
+      "allowed_roles": ["role-architect", "role-auditor"]
+    }
+  ]
+}
