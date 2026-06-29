@@ -1,12 +1,18 @@
 const { LinearClient } = require("@linear/sdk");
 const axios = require("axios");
-const fs = require("fs");
+const fs = require("fs").promises;
+const fsSync = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
+const { exec } = require("child_process");
+const util = require("util");
+const execAsync = util.promisify(exec);
 
 // Load configuration
 const configPath = path.join(__dirname, "config", "agents-matrix.json");
-const matrix = JSON.parse(fs.readFileSync(configPath, "utf8"));
+const matrix = JSON.parse(fsSync.readFileSync(configPath, "utf8"));
+
+// Global Linear Client instance for better efficiency
+const linearClient = new LinearClient({ apiKey: process.env.LINEAR_API_KEY });
 
 // Helper to get tokens from env if they start with 'env:'
 function getToken(tokenStr) {
@@ -31,40 +37,30 @@ async function runEngine() {
 
 async function processAgent(agent) {
   console.log(`Processing agent: ${agent.id} (${agent.google_account_email})`);
-  const linearToken = getToken(agent.jules_api_token); // Assuming Jules API token or a separate Linear token?
-  // Wait, the TZ says jules_api_token, but we also need Linear token.
-  // Actually, usually Jules agents have their own tokens, but for Linear SDK we need a Linear API key.
-  // I will assume LINEAR_API_KEY is available or used per agent if specified.
-  // Let's assume a global LINEAR_API_KEY for now or check if it should be in matrix.
-  // Re-reading TZ: "jules_api_token": "env:JULES_TOKEN_1"
-  // It doesn't explicitly mention Linear Token per agent in the JSON sample.
-  // I'll use a global process.env.LINEAR_API_KEY for the orchestrator to manage Linear.
-
-  const linearClient = new LinearClient({ apiKey: process.env.LINEAR_API_KEY });
 
   try {
-    // WIP Check
-    const hasWIP = await checkWIP(linearClient, agent.linear_user_id);
+    // 1. WIP Check (Stage 1)
+    const hasWIP = await checkWIP(agent.linear_user_id);
     if (hasWIP) {
-      console.log(`Agent ${agent.id} has active tasks. Skipping.`);
+      console.log(`[WIP Блокировка] Агент ${agent.id} занят. Пропуск.`);
       return;
     }
 
-    // Pull Task
-    const task = await pullTask(linearClient, agent);
+    // 2. Pull Task (Stage 2)
+    const task = await pullTask(agent);
     if (!task) {
       console.log(`No suitable tasks for agent ${agent.id}.`);
       return;
     }
 
-    // Atomic Assign
-    const assigned = await assignTask(linearClient, task, agent);
+    // 3. Atomic Assign (Stage 3: Lock & Mutex)
+    const assigned = await assignTask(task, agent);
     if (!assigned) {
-      console.log(`Failed to assign task ${task.id} to agent ${agent.id} (possibly taken).`);
+      console.log(`Failed to assign task ${task.id} to agent ${agent.id} (Race Condition).`);
       return;
     }
 
-    // Execution
+    // 4. Execution (Stage 4 & 5)
     await executeTask(agent, task);
 
   } catch (error) {
@@ -72,7 +68,7 @@ async function processAgent(agent) {
   }
 }
 
-async function checkWIP(linearClient, userId) {
+async function checkWIP(userId) {
   const issues = await linearClient.issues({
     filter: {
       assignee: { id: { eq: userId } },
@@ -82,15 +78,16 @@ async function checkWIP(linearClient, userId) {
   return issues.nodes.length > 0;
 }
 
-async function pullTask(linearClient, agent) {
-  const isTechleadOnly = agent.allowed_roles.length === 1 && agent.allowed_roles[0] === "role-techlead";
+async function pullTask(agent) {
+  const isTechlead = agent.allowed_roles.includes("role-techlead");
 
-  // Try to pull as Techlead if applicable
-  if (agent.allowed_roles.includes("role-techlead")) {
+  if (isTechlead) {
+    // Techlead pulls from Inbox, no assignee, and specifically NO labels (supermarket replenishment)
     const inboxIssues = await linearClient.issues({
       filter: {
         state: { name: { eq: "Inbox" } },
-        assignee: { null: true }
+        assignee: { null: true },
+        labels: { null: true }
       },
       orderBy: "priority",
       first: 1
@@ -98,7 +95,6 @@ async function pullTask(linearClient, agent) {
     if (inboxIssues.nodes.length > 0) return inboxIssues.nodes[0];
   }
 
-  // If not Techlead or no Inbox tasks, try other roles
   const operationalRoles = agent.allowed_roles.filter(r => r !== "role-techlead");
   if (operationalRoles.length > 0) {
     const todoIssues = await linearClient.issues({
@@ -116,8 +112,7 @@ async function pullTask(linearClient, agent) {
   return null;
 }
 
-async function assignTask(linearClient, task, agent) {
-  // Get the 'In Progress' state ID for the team
+async function assignTask(task, agent) {
   const team = await task.team;
   const states = await team.states();
   const inProgressState = states.nodes.find(s => s.name === "In Progress");
@@ -141,76 +136,90 @@ async function executeTask(agent, task) {
   const workspaceDir = path.join(__dirname, "workspace", `task-${taskId}-${workerId}`);
 
   try {
-    fs.mkdirSync(workspaceDir, { recursive: true });
+    await fs.mkdir(workspaceDir, { recursive: true });
 
-    // 1. Prepare context
+    // 1. Determine Role and Prepare Context (Stage 4)
     const role = await determineRole(agent, task);
-    const context = await prepareContext(role, task);
+    const context = await prepareContext(role, task, agent);
 
-    // 2. Clone Repo (Simulated logic to find repo URL from task description/metadata)
-    const repoUrlMatch = (task.description || "").match(/https:\/\/github\.com\/[^\s)]+/);
-    const repoUrl = repoUrlMatch ? repoUrlMatch[0] : null;
+    // 2. Workspace Sandbox (Stage 5)
+    if (context.repositoryUrl) {
+      // STRICT SANITIZATION to prevent command injection
+      const sanitizedUrl = context.repositoryUrl.replace(/[^\w.:\/-]/g, "");
+      console.log(`Cloning sanitized ${sanitizedUrl} for agent ${agent.id}...`);
 
-    if (repoUrl) {
-      console.log(`Cloning repository ${repoUrl} for agent ${agent.id}...`);
       try {
-        execSync(`git clone ${repoUrl} .`, {
-          cwd: workspaceDir,
-          env: { ...process.env, GIT_AUTHOR_NAME: `Jules ${role}`, GIT_AUTHOR_EMAIL: agent.google_account_email }
-        });
+        await execAsync(`git clone "${sanitizedUrl}" .`, { cwd: workspaceDir });
+        // Use execFile-style or double quotes for safety
+        await execAsync(`git config user.name "Jules - ${role.replace(/"/g, "")}"`, { cwd: workspaceDir });
+        await execAsync(`git config user.email "${agent.google_account_email.replace(/"/g, "")}"`, { cwd: workspaceDir });
       } catch (e) {
-        console.error(`Git clone failed for ${repoUrl}:`, e.message);
+        throw new Error(`Git operations failed: ${e.message}`);
       }
     }
 
     // 3. Call Jules API (Stateless Injection)
-    console.log(`Calling Jules API for ${agent.id} on task ${task.number} with role ${role}...`);
-    const julesResponse = await callJulesAPI(agent, context, workspaceDir);
+    console.log(`Calling Jules API for agent ${agent.id} [Task ${task.number}]`);
+    const julesResponse = await callJulesAPI(agent, context, workspaceDir, task);
 
-    // 4. Update Linear Status and Comment
+    // 4. Teardown and Reporting (Stage 6)
     await finishTask(agent, task, julesResponse, role);
 
+  } catch (error) {
+    console.error(`Fault Tolerance: Task ${task.number} failed for agent ${agent.id}:`, error.message);
+    await handleTaskFailure(task, agent, error);
   } finally {
-    // Cleanup (Pull-system closure)
-    if (fs.existsSync(workspaceDir)) {
-      console.log(`Cleaning up workspace for task ${task.number}...`);
-      fs.rmSync(workspaceDir, { recursive: true, force: true });
+    // Stage 6: Disk cleanup
+    try {
+      if (fsSync.existsSync(workspaceDir)) {
+        console.log(`Cleaning up workspace for task ${task.number}...`);
+        await fs.rm(workspaceDir, { recursive: true, force: true });
+      }
+    } catch (cleanupError) {
+      console.error(`Cleanup error for ${workspaceDir}:`, cleanupError.message);
     }
   }
 }
 
-async function callJulesAPI(agent, context, workspaceDir) {
+async function callJulesAPI(agent, context, workspaceDir, task) {
   const token = getToken(agent.jules_api_token);
-  // Hypothetical Jules API endpoint
   const JULES_API_URL = process.env.JULES_API_URL || "https://api.jules.ai/v1/execute";
 
+  const runPayload = {
+    systemPrompt: context.systemPrompt,
+    taskContext: {
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      metadata: { repositoryUrl: context.repositoryUrl }
+    },
+    enforceCleanSession: true,
+    workspace_path: workspaceDir,
+    agent_email: agent.google_account_email
+  };
+
   try {
-    const response = await axios.post(JULES_API_URL, {
-      prompt: context,
-      workspace_path: workspaceDir,
-      clean_session: true,
-      agent_email: agent.google_account_email
-    }, {
+    const response = await axios.post(JULES_API_URL, runPayload, {
       headers: { "Authorization": `Bearer ${token}` }
     });
     return response.data;
   } catch (error) {
-    console.error("Jules API Call failed:", error.response ? error.response.data : error.message);
-    return { success: false, report: "Jules API failed to execute." };
+    throw new Error(`Jules API Error: ${error.response ? JSON.stringify(error.response.data) : error.message}`);
   }
 }
 
 async function finishTask(agent, task, julesResponse, role) {
-  const linearClient = new LinearClient({ apiKey: process.env.LINEAR_API_KEY });
   const team = await task.team;
   const states = await team.states();
 
   let newStateName = "Done";
+  let assigneeId = agent.linear_user_id;
   let labelIdsToAdd = [];
 
   if (role === "role-techlead") {
     newStateName = "Todo";
-    // Parse role tags from julesResponse.report (e.g., "Role assigned: role-architect")
+    assigneeId = null; // Techlead requirement
+
     const roleTagMatch = (julesResponse.report || "").match(/role-[a-z-]+/);
     if (roleTagMatch) {
       const tagToApply = roleTagMatch[0];
@@ -224,11 +233,13 @@ async function finishTask(agent, task, julesResponse, role) {
 
   const newState = states.nodes.find(s => s.name === newStateName) || states.nodes.find(s => s.name === "Done");
 
-  await task.addComment({
-    body: `Jules Agent (${role}) report:\n${julesResponse.report || "Task completed."}`
-  });
+  const report = julesResponse.report || "Task completed successfully.";
+  await task.addComment({ body: `### Исполнительный отчет Jules\n${report}` });
 
-  const updateData = { stateId: newState.id };
+  const updateData = {
+    stateId: newState.id,
+    assigneeId: assigneeId
+  };
   if (labelIdsToAdd.length > 0) {
     updateData.labelIds = labelIdsToAdd;
   }
@@ -236,8 +247,24 @@ async function finishTask(agent, task, julesResponse, role) {
   await linearClient.issueUpdate(task.id, updateData);
 }
 
+async function handleTaskFailure(task, agent, error) {
+  const team = await task.team;
+  const states = await team.states();
+  const failedState = states.nodes.find(s => s.name === "Failed") || states.nodes.find(s => s.name === "Canceled");
+
+  await task.addComment({
+    body: `### Ошибка выполнения\nАгент: ${agent.id}\nСтек ошибки:\n\`\`\`\n${error.stack || error.message}\n\`\`\``
+  });
+
+  await linearClient.issueUpdate(task.id, {
+    stateId: failedState ? failedState.id : undefined,
+    assigneeId: null
+  });
+}
+
 async function determineRole(agent, task) {
-  if (agent.allowed_roles.includes("role-techlead") && (await task.state).name === "Inbox") {
+  const state = await task.state;
+  if (agent.allowed_roles.includes("role-techlead") && state.name === "Inbox") {
     return "role-techlead";
   }
   const labels = await task.labels();
@@ -245,18 +272,23 @@ async function determineRole(agent, task) {
   return roleLabel ? roleLabel.name : agent.allowed_roles[0];
 }
 
-async function prepareContext(role, task) {
+async function prepareContext(role, task, agent) {
   const rolePromptPath = path.join(__dirname, "roles", `${role}.md`);
-  const systemPrompt = fs.readFileSync(rolePromptPath, "utf8");
-  const taskDescription = task.description || "No description";
-  const taskTitle = task.title;
+  let systemPrompt = await fs.readFile(rolePromptPath, "utf8");
 
-  return `${systemPrompt}\n\nTask: ${taskTitle}\nDescription: ${taskDescription}`;
+  systemPrompt = systemPrompt.replace(/\[EMAIL_АГЕНТА\]/g, agent.google_account_email);
+
+  let repositoryUrl = null;
+  if (task.description) {
+    const match = task.description.match(/https:\/\/github\.com\/[^\s)]+/);
+    if (match) repositoryUrl = match[0];
+  }
+
+  return { systemPrompt, repositoryUrl };
 }
 
-// Start engine if run directly
 if (require.main === module) {
   runEngine().catch(console.error);
 }
 
-module.exports = { checkWIP, pullTask, assignTask, prepareContext };
+module.exports = { checkWIP, pullTask, assignTask, prepareContext, executeTask };
